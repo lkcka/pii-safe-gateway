@@ -1,0 +1,29 @@
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake git \
+        libvulkan-dev vulkan-tools mesa-vulkan-drivers glslang-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CMAKE_ARGS="-DGGML_VULKAN=ON"
+ENV FORCE_CMAKE=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libvulkan1 mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/root/.local/lib/python3.11/site-packages
+
+WORKDIR /app
+COPY app ./app
+
+EXPOSE 8001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

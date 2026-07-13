@@ -1,0 +1,40 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Виртуальные окружения =====
+venv/
+.venv/
+env/
+
+# ===== Переменные окружения и секреты =====
+.env
+!.env.example
+
+# ===== Веса моделей (гигабайты, не храним в git) =====
+models/*.gguf
+models/*.bin
+models/*.safetensors
+!models/.gitkeep
+
+# ===== Docker =====
+*.log
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Временные файлы обработки документов (если появятся при локальных тестах) =====
+*.tmp
+tmp/

@@ -1,0 +1,72 @@
+version: "3.9"
+
+networks:
+  pii-net:
+    driver: bridge
+
+services:
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: pii-gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    environment:
+      - FILTER_SERVICE_URL=${FILTER_SERVICE_URL:-http://filter-service:8001}
+      - EXTERNAL_LLM_BASE_URL=${EXTERNAL_LLM_BASE_URL}
+      - EXTERNAL_LLM_API_KEY=${EXTERNAL_LLM_API_KEY}
+      - CHUNK_MAX_CHARS=${CHUNK_MAX_CHARS:-3000}
+      - CHUNK_OVERLAP_CHARS=${CHUNK_OVERLAP_CHARS:-250}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-20}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FILTER_REQUEST_TIMEOUT=${FILTER_REQUEST_TIMEOUT:-60}
+    networks:
+      - pii-net
+    restart: unless-stopped
+
+  filter-service-cpu:
+    profiles: ["cpu"]
+    build:
+      context: ./filter_service
+      dockerfile: Dockerfile
+    container_name: pii-filter-service
+    ports:
+      - "${FILTER_SERVICE_PORT:-8001}:8001"     # <-- добавлено для прямого теста через /docs
+    networks:
+      pii-net:
+        aliases:
+          - filter-service
+    volumes:
+      - ./models:/models:ro
+    environment:
+      - FILTER_MODEL_PATH=${FILTER_MODEL_PATH}
+      - FILTER_MODEL_CTX=${FILTER_MODEL_CTX:-8192}
+      - FILTER_MODEL_THREADS=${FILTER_MODEL_THREADS:-8}
+      - N_GPU_LAYERS=0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  filter-service-gpu:
+    profiles: ["gpu"]
+    build:
+      context: ./filter_service
+      dockerfile: Dockerfile.gpu
+    container_name: pii-filter-service
+    ports:
+      - "${FILTER_SERVICE_PORT:-8001}:8001"     # <-- добавлено для прямого теста через /docs
+    networks:
+      pii-net:
+        aliases:
+          - filter-service
+    volumes:
+      - ./models:/models:ro
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      - FILTER_MODEL_PATH=${FILTER_MODEL_PATH}
+      - FILTER_MODEL_CTX=${FILTER_MODEL_CTX:-8192}
+      - FILTER_MODEL_THREADS=${FILTER_MODEL_THREADS:-8}
+      - N_GPU_LAYERS=${N_GPU_LAYERS:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
