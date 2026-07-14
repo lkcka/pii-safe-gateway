@@ -190,26 +190,39 @@ def _parse_json_leniently(raw_content: str) -> dict:
     валидного" JSON, который часто генерируют LLM без constrained decoding.
     """
     try:
-        return json.loads(raw_content)
+        parsed = json.loads(raw_content)
     except json.JSONDecodeError:
         logger.warning(
             "Прямой json.loads не удался, пробуем json_repair. Сырой ответ: %s",
             raw_content,
         )
+        try:
+            parsed = json_repair.loads(raw_content)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("json_repair тоже не справился с ответом: %s", raw_content)
+            raise ValueError("Не удалось разобрать JSON-ответ локальной LLM даже с repair") from exc
 
-    try:
-        repaired = json_repair.loads(raw_content)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("json_repair тоже не справился с ответом: %s", raw_content)
-        raise ValueError(
-            "Не удалось разобрать JSON-ответ локальной LLM даже с repair"
-        ) from exc
+    # Нормализация: допускаем, что модель вернула
+    # 1) нормальный dict {"entities": [...]}
+    # 2) list [entity, entity, ...]
+    # 3) single-entity dict {"start":..,"end":..,"text":..,"type":..}
+    if isinstance(parsed, dict):
+        if "entities" in parsed and isinstance(parsed["entities"], list):
+            return parsed
 
-    if not isinstance(repaired, dict):
-        logger.error("json_repair вернул не словарь: %r (ответ: %s)", repaired, raw_content)
-        raise ValueError("json_repair вернул структуру неожиданного типа")
+        # single entity object -> wrap
+        if {"start", "end", "text", "type"}.issubset(parsed.keys()):
+            return {"entities": [parsed]}
 
-    return repaired
+        logger.error("JSON dict неожиданной формы: %r (raw=%s)", parsed, raw_content)
+        raise ValueError("JSON-ответ неожиданной формы (dict без entities)")
+
+    if isinstance(parsed, list):
+        # модель вернула список сущностей без корневого объекта
+        return {"entities": parsed}
+
+    logger.error("json_repair вернул неожиданный тип: %r (raw=%s)", type(parsed), raw_content)
+    raise ValueError("json_repair вернул структуру неожиданного типа")
 
 
 def _parse_entity(text: str, item: object, raw_content: str) -> Optional[PIIEntity]:
