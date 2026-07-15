@@ -176,19 +176,40 @@ docker compose exec gateway python scripts/create_sample_docx.py
 Скрипт создаёт `gateway/scripts/sample.docx` (ФИО в абзаце, телефон/email в
 таблице), сохраняет `sample.docx.b64.txt` и печатает base64 в stdout.
 
-### DOCX smoke test (PowerShell)
+### DOCX smoke test (рекомендуемый порядок)
 
-**Готовый скрипт:**
+**Шаг 1 — воспроизводимая проверка без внешнего LLM** (extract → filter → anonymize):
+
+```powershell
+docker compose exec gateway python scripts/verify_sample_docx.py
+```
+
+Скрипт печатает извлечённый и анонимизированный текст, проверяет порядок блоков
+и завершается с `exit 0`, если `applied >= 2`. При нестабильности Filter Service
+на CPU допустим один повтор.
+
+**Шаг 2 — полный smoke через Gateway + внешний LLM (опционально):**
 
 ```powershell
 cd gateway\scripts
 .\smoke_test_gateway.ps1 -GatewayUrl "http://localhost:8000" -Model "openai/gpt-4o-mini"
 ```
 
-**Вручную:**
+Скрипт сначала запускает `verify_sample_docx.py` внутри контейнера, затем
+отправляет запрос в `/v1/chat/completions` и **проверяет `applied>=2` в логах
+gateway** (а не маркеры в ответе LLM — внешняя модель не обязана дословно
+повторять документ).
+
+Только проверка extract+filter (без вызова внешнего LLM):
 
 ```powershell
-$b64 = (Get-Content -Path "gateway\scripts\sample.docx.b64.txt" -Raw).Trim()
+.\smoke_test_gateway.ps1 -SkipGatewayCall
+```
+
+**Вручную (интеграция с OpenRouter):**
+
+```powershell
+$b64 = (Get-Content -Path "gateway\scripts\sample.docx.b64.txt" -Raw -Encoding UTF8).Trim()
 
 $body = @{
   model = "openai/gpt-4o-mini"
@@ -203,10 +224,7 @@ Invoke-RestMethod -Method Post `
   -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
 
-Ожидаемые маркеры в ответе (если LLM повторяет документ): `[PERSON]`, `[PHONE]`,
-`[EMAIL]`.
-
-### Проверка логов (без PII)
+### Проверка логов (без PII) — основной критерий успеха
 
 ```powershell
 docker compose logs --tail=50 gateway
@@ -315,7 +333,7 @@ pii-safe-gateway/
 ├── gateway/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── scripts/              # create_sample_docx.py, smoke_test_gateway.ps1
+│   ├── scripts/              # create_sample_docx.py, verify_sample_docx.py, smoke_test_gateway.ps1
 │   └── app/
 │       ├── main.py
 │       ├── config.py
