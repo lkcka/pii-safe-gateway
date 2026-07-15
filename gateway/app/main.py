@@ -2,7 +2,7 @@ import logging
 from typing import Any, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -180,7 +180,7 @@ async def _process_files_and_anonymize(files: list[dict[str, Any]]) -> str:
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request) -> Response:
+async def chat_completions(body: ChatCompletionRequest = Body(...)) -> Response:
     """
     OpenAI-compatible endpoint.
     Расширение: принимает поле `files` (JSON), очищает текст и добавляет в messages.
@@ -189,18 +189,7 @@ async def chat_completions(request: Request) -> Response:
     if _http_external is None:
         raise HTTPException(status_code=503, detail="External HTTP client not initialized")
 
-    try:
-        raw_payload: dict[str, Any] = await request.json()
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {exc}") from exc
-
-    # Валидация (extras сохраняем)
-    try:
-        parsed = ChatCompletionRequest.model_validate(raw_payload)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    payload = parsed.model_dump(mode="python")  # включая extra поля
+    payload = body.model_dump(mode="python")  # including extra fields
     files = payload.pop("files", None)
     stream = bool(payload.get("stream", False))
 

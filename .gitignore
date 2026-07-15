@@ -38,3 +38,5 @@ Thumbs.db
 # ===== Временные файлы обработки документов (если появятся при локальных тестах) =====
 *.tmp
 tmp/
+gateway/scripts/sample.docx
+gateway/scripts/sample.docx.b64.txt
